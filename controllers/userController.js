@@ -1,4 +1,6 @@
 const { supabase } = require('../config/supabase');
+const bcrypt = require('bcrypt');
+const { generateToken } = require('../middleware/auth');
 
 // Helper function to calculate age from date of birth
 const calculateAge = (dateOfBirth) => {
@@ -90,15 +92,24 @@ const userController = {
         address,
         contact_number,
         email_address,
-        emergency_contact_person_number
+        emergency_contact_person_number,
+        password
       } = req.body;
 
       // Validate required fields
-      if (!full_name || !date_of_birth || !email_address) {
+      if (!full_name || !date_of_birth || !email_address || !password) {
         return res.status(400).json({
           error: 'Validation Error',
-          message: 'full_name, date_of_birth, and email_address are required',
-          required_fields: ['full_name', 'date_of_birth', 'email_address']
+          message: 'full_name, date_of_birth, email_address, and password are required',
+          required_fields: ['full_name', 'date_of_birth', 'email_address', 'password']
+        });
+      }
+
+      // Validate password length
+      if (password.length < 8) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: 'Password must be at least 8 characters long'
         });
       }
 
@@ -119,6 +130,10 @@ const userController = {
       // Calculate age from date of birth (override if age was provided)
       const calculatedAge = calculateAge(date_of_birth);
 
+      // Hash password
+      const saltRounds = 10;
+      const password_hash = await bcrypt.hash(password, saltRounds);
+
       // Create new user
       const { data, error } = await supabase
         .from('users')
@@ -131,7 +146,8 @@ const userController = {
           address,
           contact_number,
           email_address,
-          emergency_contact_person_number
+          emergency_contact_person_number,
+          password_hash
         })
         .select()
         .single();
@@ -147,10 +163,13 @@ const userController = {
         throw error;
       }
 
+      // Remove password_hash from response
+      const { password_hash: _, ...userData } = data;
+
       res.status(201).json({
         success: true,
         message: 'User registered successfully',
-        data: data
+        data: userData
       });
     } catch (error) {
       next(error);
@@ -348,6 +367,99 @@ const userController = {
       res.json({
         message: 'User retrieved successfully',
         data: data
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  // Login user
+  login: async (req, res, next) => {
+    try {
+      const { email_address, password } = req.body;
+
+      // Validate required fields
+      if (!email_address || !password) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: 'email_address and password are required'
+        });
+      }
+
+      // Find user by email
+      const { data: user, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email_address', email_address)
+        .single();
+
+      if (fetchError || !user) {
+        return res.status(401).json({
+          error: 'Authentication Failed',
+          message: 'Invalid email or password'
+        });
+      }
+
+      // Check if user has a password (for backwards compatibility with existing users)
+      if (!user.password_hash) {
+        return res.status(401).json({
+          error: 'Authentication Failed',
+          message: 'Please reset your password or contact support'
+        });
+      }
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+
+      if (!isPasswordValid) {
+        return res.status(401).json({
+          error: 'Authentication Failed',
+          message: 'Invalid email or password'
+        });
+      }
+
+      // Remove password_hash from response
+      const { password_hash: _, ...userData } = user;
+
+      // Generate JWT token
+      const token = generateToken(user);
+
+      res.json({
+        success: true,
+        message: 'Login successful',
+        token: token,
+        data: userData
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  // Get current authenticated user profile
+  getCurrentUser: async (req, res, next) => {
+    try {
+      // User info is already attached to req by authenticate middleware
+      const userId = req.user.id;
+
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error || !user) {
+        return res.status(404).json({
+          error: 'User not found',
+          message: 'User profile not found'
+        });
+      }
+
+      // Remove password_hash from response
+      const { password_hash: _, ...userData } = user;
+
+      res.json({
+        message: 'User profile retrieved successfully',
+        data: userData
       });
     } catch (error) {
       next(error);

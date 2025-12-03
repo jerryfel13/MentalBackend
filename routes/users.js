@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
+const { authenticate } = require('../middleware/auth');
 
 // GET /api/users - Get all users
 router.get('/', userController.getAll);
@@ -10,6 +11,12 @@ router.get('/email/:email', userController.getByEmail);
 
 // POST /api/users/register - Register new user
 router.post('/register', userController.register);
+
+// POST /api/users/login - Login user
+router.post('/login', userController.login);
+
+// GET /api/users/me - Get current authenticated user (protected route)
+router.get('/me', authenticate, userController.getCurrentUser);
 
 // GET /api/users/:id - Get user by ID
 router.get('/:id', userController.getById);
