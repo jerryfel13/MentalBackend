@@ -1,10 +1,16 @@
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const morgan = require('morgan');
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 4000;
+
+// Initialize Socket.io
+const { initializeSocket } = require('./services/socketService');
+initializeSocket(server);
 
 // Middleware
 app.use(cors());
@@ -42,9 +48,10 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`WebSocket server initialized`);
 });
 
 module.exports = app;
