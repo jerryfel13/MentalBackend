@@ -6,12 +6,14 @@ const exampleRoutes = require('./example');
 const userRoutes = require('./users');
 const doctorRoutes = require('./doctors');
 const appointmentRoutes = require('./appointments');
+const paymentRoutes = require('./payments');
 
 // Mount routes
 router.use('/example', exampleRoutes);
 router.use('/users', userRoutes);
 router.use('/doctors', doctorRoutes);
 router.use('/appointments', appointmentRoutes);
+router.use('/payments', paymentRoutes);
 
 // API info route
 router.get('/', (req, res) => {
@@ -23,7 +25,8 @@ router.get('/', (req, res) => {
       example: '/api/example',
       users: '/api/users',
       doctors: '/api/doctors',
-      appointments: '/api/appointments'
+      appointments: '/api/appointments',
+      payments: '/api/payments'
     }
   });
 });
