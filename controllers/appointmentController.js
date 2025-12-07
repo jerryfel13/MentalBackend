@@ -5,6 +5,7 @@ const enrichAppointmentsWithUsers = async (appointments) => {
   if (!appointments || appointments.length === 0) {
     return appointments;
   }
+   
 
   const doctorIds = [...new Set(appointments.map(apt => apt.doctor_id))];
   const patientIds = [...new Set(appointments.map(apt => apt.user_id))];
