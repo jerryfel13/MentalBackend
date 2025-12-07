@@ -26,6 +26,11 @@ class PaymentService {
       throw new Error('Invalid payment method. Only GCash and PayMaya are supported.');
     }
 
+    // Enforce PHP currency only
+    if (currency && currency.toUpperCase() !== 'PHP') {
+      throw new Error('Only PHP (Philippine Peso) currency is supported.');
+    }
+
     // Generate unique transaction ID
     const transactionId = this.generateTransactionId(payment_method);
     const paymentReference = this.generatePaymentReference();

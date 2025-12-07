@@ -254,13 +254,13 @@ const paymentController = {
         });
       }
 
-      // Initialize payment using payment service
+      // Initialize payment using payment service (PHP currency only)
       const result = await paymentService.initializePayment({
         appointment_id,
         doctor_id: appointment.doctor_id,
         patient_id: patientId,
         amount: doctor.consultation_fee,
-        currency: 'PHP',
+        currency: 'PHP', // PHP currency only
         payment_method
       });
 
@@ -414,6 +414,14 @@ const paymentController = {
         return res.status(400).json({
           error: 'Missing required fields',
           message: 'appointment_id, amount, and payment_method are required'
+        });
+      }
+
+      // Enforce PHP currency only
+      if (currency && currency.toUpperCase() !== 'PHP') {
+        return res.status(400).json({
+          error: 'Invalid currency',
+          message: 'Only PHP (Philippine Peso) currency is supported'
         });
       }
 
