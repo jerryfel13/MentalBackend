@@ -175,10 +175,10 @@ const paymentController = {
       const patientId = req.user.id;
 
       // Validate required fields
-      if (!appointment_id || !payment_method) {
+      if (!appointment_id || !payment_method || !cp_number) {
         return res.status(400).json({
           error: 'Missing required fields',
-          message: 'appointment_id and payment_method are required'
+          message: 'appointment_id, payment_method, and cp_number are required'
         });
       }
 
@@ -256,18 +256,32 @@ const paymentController = {
         });
       }
 
-      // Validate CP number if provided
-      if (cp_number) {
-        // Clean and validate Philippine mobile number format
-        const cleanedCpNumber = cp_number.replace(/[\s\-\(\)]/g, '');
-        const phMobileRegex = /^(09|\+639)[0-9]{9}$/;
-        
-        if (!phMobileRegex.test(cleanedCpNumber)) {
-          return res.status(400).json({
-            error: 'Invalid CP number',
-            message: 'Please enter a valid Philippine mobile number (09XXXXXXXXX)'
-          });
-        }
+      // Validate CP number - must be exactly 11 digits starting with 09
+      if (!cp_number) {
+        return res.status(400).json({
+          error: 'Missing CP number',
+          message: 'Mobile number is required'
+        });
+      }
+
+      // Clean and validate Philippine mobile number format (exactly 11 digits)
+      const cleanedCpNumber = cp_number.replace(/[\s\-\(\)\+]/g, '');
+      
+      // Must be exactly 11 digits starting with 09
+      if (cleanedCpNumber.length !== 11) {
+        return res.status(400).json({
+          error: 'Invalid mobile number length',
+          message: 'Mobile number must be exactly 11 digits (e.g., 09123456789)'
+        });
+      }
+
+      const phMobileRegex = /^09[0-9]{9}$/;
+      
+      if (!phMobileRegex.test(cleanedCpNumber)) {
+        return res.status(400).json({
+          error: 'Invalid mobile number format',
+          message: 'Mobile number must start with 09 and be exactly 11 digits'
+        });
       }
 
       // Initialize payment using payment service (PHP currency only)
@@ -483,6 +497,7 @@ const paymentController = {
         amount,
         currency = 'PHP',
         payment_method,
+        cp_number,
         transaction_id,
         payment_intent_id,
         receipt_url,
@@ -513,6 +528,27 @@ const paymentController = {
           error: 'Invalid currency',
           message: 'Only PHP (Philippine Peso) currency is supported'
         });
+      }
+
+      // Validate CP number if provided (exactly 11 digits starting with 09)
+      if (cp_number) {
+        const cleanedCpNumber = cp_number.replace(/[\s\-\(\)\+]/g, '');
+        
+        if (cleanedCpNumber.length !== 11) {
+          return res.status(400).json({
+            error: 'Invalid mobile number length',
+            message: 'Mobile number must be exactly 11 digits (e.g., 09123456789)'
+          });
+        }
+
+        const phMobileRegex = /^09[0-9]{9}$/;
+        
+        if (!phMobileRegex.test(cleanedCpNumber)) {
+          return res.status(400).json({
+            error: 'Invalid mobile number format',
+            message: 'Mobile number must start with 09 and be exactly 11 digits'
+          });
+        }
       }
 
       // Get appointment details to verify ownership and get doctor_id
@@ -566,7 +602,10 @@ const paymentController = {
         payment_intent_id,
         receipt_url,
         paid_at: new Date().toISOString(),
-        metadata: metadata || {}
+        metadata: {
+          ...(metadata || {}),
+          cp_number: cp_number ? cp_number.replace(/[\s\-\(\)\+]/g, '') : null
+        }
       };
 
       const { data: payment, error: paymentError } = await supabase
