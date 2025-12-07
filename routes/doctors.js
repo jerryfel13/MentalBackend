@@ -3,16 +3,18 @@ const router = express.Router();
 const doctorController = require('../controllers/doctorController');
 const { authenticate } = require('../middleware/auth');
 
+
+
 // Public routes
 router.get('/', doctorController.getAll);
 router.get('/available', doctorController.getAvailable);
 router.get('/:id', doctorController.getById);
 router.post('/register', doctorController.register);
 router.post('/login', doctorController.login);
+router.post('/bookAppointment', doctorController.bookAppointment);
 
-// Protected routes (require authentication)
+// Protected routes
 router.put('/:id', authenticate, doctorController.update);
 router.delete('/:id', authenticate, doctorController.delete);
 
 module.exports = router;
-

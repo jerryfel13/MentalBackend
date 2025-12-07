@@ -427,12 +427,17 @@ const userController = {
         role: user.role || 'user'
       });
 
-      res.json({
-        success: true,
-        message: 'Login successful',
-        token: token,
-        data: userData
-      });
+      res.status(200).json({
+  success: true,
+  message: "Login successful",
+  token: token,
+  data: {
+    id: user.id,
+    full_name: user.full_name,
+    email_address: user.email_address,
+  }
+});
+
     } catch (error) {
       next(error);
     }
