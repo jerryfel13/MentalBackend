@@ -320,10 +320,10 @@ const appointmentController = {
         });
       }
 
-      // Fetch doctor's name from users table (since doctor_id now references users table)
+      // Verify doctor exists in users table (since doctor_id now references users table)
       const { data: doctor, error: doctorError } = await supabase
         .from('users')
-        .select('full_name')
+        .select('id, full_name, role')
         .eq('id', doctor_id)
         .single();
 
@@ -334,16 +334,24 @@ const appointmentController = {
         });
       }
 
+      // Verify the user is actually a doctor
+      if (doctor.role !== 'doctor' && doctor.role !== 'admin') {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: 'The specified user is not a doctor.'
+        });
+      }
+
       // Generate meeting room ID if not provided (for video calls)
       const roomId = meeting_room_id || `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      // Create new appointment
+      // Create new appointment (doctor_name column is optional/removed, we use doctor_id instead)
       const { data, error } = await supabase
         .from('appointments')
         .insert({
           user_id,
           doctor_id,
-          doctor_name: doctor.full_name, // Include doctor_name if column exists
+          // doctor_name is no longer needed - we can get it from doctor_id via users table
           appointment_date,
           appointment_time,
           duration_minutes: duration_minutes || 60,
