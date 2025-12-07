@@ -441,6 +441,25 @@ const appointmentController = {
       // Enrich appointment with user data
       await enrichAppointmentsWithUsers([appointment]);
 
+      // Notify patient if doctor accepts appointment
+      if (status && status.toLowerCase() === 'confirmed' && appointment.status?.toLowerCase() !== 'confirmed') {
+        try {
+          const notificationService = require('../services/notificationService');
+          const { data: doctor } = await supabase
+            .from('users')
+            .select('full_name')
+            .eq('id', appointment.doctor_id)
+            .single();
+          
+          if (doctor) {
+            await notificationService.notifyAppointmentAccepted(appointment.id, doctor.full_name);
+          }
+        } catch (error) {
+          console.error('Error sending appointment acceptance notification:', error);
+          // Don't fail the request if notification fails
+        }
+      }
+
       res.json({
         message: 'Appointment updated successfully',
         data: appointment
