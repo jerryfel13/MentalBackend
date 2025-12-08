@@ -22,17 +22,77 @@ const initializeSocket = (server) => {
     socket.on('join-room', async (roomId, userId, userName, userRole) => {
       try {
         // Validate appointment exists and check status
-        // roomId is the meeting_room_id, we need to find the appointment
-        const { data: appointment, error: appointmentError } = await supabase
-          .from('appointments')
-          .select('id, user_id, doctor_id, appointment_date, appointment_time, status, meeting_room_id')
-          .or(`meeting_room_id.eq.${roomId},id.eq.${roomId}`)
-          .single();
+        // roomId could be meeting_room_id or appointment id
+        const roomIdStr = String(roomId).trim();
+        console.log(`🔍 Looking for appointment with roomId: "${roomIdStr}" (type: ${typeof roomId})`);
+        
+        // Try to find appointment by meeting_room_id first (if it's not a UUID format)
+        let appointment = null;
+        let appointmentError = null;
+        
+        // Check if roomId looks like a UUID (appointment id) or a room ID
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomIdStr);
+        
+        if (!isUUID) {
+          // Try meeting_room_id first for non-UUID values
+          console.log(`🔍 Trying meeting_room_id first (not a UUID)...`);
+          const result = await supabase
+            .from('appointments')
+            .select('id, user_id, doctor_id, appointment_date, appointment_time, status, meeting_room_id')
+            .eq('meeting_room_id', roomIdStr)
+            .maybeSingle();
+          
+          appointment = result.data;
+          appointmentError = result.error;
+          
+          if (appointment) {
+            console.log(`✅ Found appointment by meeting_room_id: ${appointment.id}`);
+          } else if (appointmentError) {
+            console.log(`⚠️ Error searching by meeting_room_id:`, appointmentError);
+          }
+        }
+        
+        // If not found by meeting_room_id, try by id (works for both UUID and non-UUID)
+        if (!appointment) {
+          console.log(`🔍 Not found by meeting_room_id, trying by id...`);
+          const result = await supabase
+            .from('appointments')
+            .select('id, user_id, doctor_id, appointment_date, appointment_time, status, meeting_room_id')
+            .eq('id', roomIdStr)
+            .maybeSingle();
+          
+          if (!result.error && result.data) {
+            appointment = result.data;
+            appointmentError = null;
+            console.log(`✅ Found appointment by id: ${appointment.id}`);
+          } else {
+            appointmentError = result.error || appointmentError;
+            if (appointmentError) {
+              console.error(`❌ Appointment not found for room ${roomIdStr}:`, appointmentError);
+            } else {
+              console.log(`ℹ️ No appointment found with id: ${roomIdStr}`);
+            }
+          }
+        }
 
-        if (appointmentError || !appointment) {
-          console.error(`Appointment not found for room ${roomId}:`, appointmentError);
+        if (!appointment || appointmentError) {
+          console.error(`❌ Appointment not found for room "${roomIdStr}". Error:`, appointmentError);
+          console.error(`Searched for: meeting_room_id='${roomIdStr}' OR id='${roomIdStr}'`);
+          
+          // Log recent appointments for debugging (only if error)
+          try {
+            const { data: allAppointments } = await supabase
+              .from('appointments')
+              .select('id, meeting_room_id, status, user_id, doctor_id')
+              .order('created_at', { ascending: false })
+              .limit(5);
+            console.log(`📋 Recent appointments:`, JSON.stringify(allAppointments, null, 2));
+          } catch (debugError) {
+            console.error('Error fetching debug appointments:', debugError);
+          }
+          
           socket.emit('error', { 
-            message: 'Appointment not found. Please check the appointment ID.' 
+            message: `Appointment not found. Please check the appointment ID. Room ID: ${roomIdStr}` 
           });
           return;
         }
@@ -128,14 +188,60 @@ const initializeSocket = (server) => {
       try {
         // Validate appointment exists and is not completed
         // Allow doctors to start calls even if appointment date is in the past
-        const { data: appointment, error: appointmentError } = await supabase
-          .from('appointments')
-          .select('id, doctor_id, status, meeting_room_id')
-          .or(`meeting_room_id.eq.${roomId},id.eq.${roomId}`)
-          .single();
+        const roomIdStr = String(roomId).trim();
+        console.log(`🔍 [start-call] Looking for appointment with roomId: "${roomIdStr}"`);
+        
+        // Try to find appointment by meeting_room_id first (if it's not a UUID format)
+        let appointment = null;
+        let appointmentError = null;
+        
+        // Check if roomId looks like a UUID (appointment id) or a room ID
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomIdStr);
+        
+        if (!isUUID) {
+          // Try meeting_room_id first for non-UUID values
+          console.log(`🔍 [start-call] Trying meeting_room_id first (not a UUID)...`);
+          const result = await supabase
+            .from('appointments')
+            .select('id, doctor_id, status, meeting_room_id')
+            .eq('meeting_room_id', roomIdStr)
+            .maybeSingle();
+          
+          appointment = result.data;
+          appointmentError = result.error;
+          
+          if (appointment) {
+            console.log(`✅ [start-call] Found appointment by meeting_room_id: ${appointment.id}`);
+          } else if (appointmentError) {
+            console.log(`⚠️ [start-call] Error searching by meeting_room_id:`, appointmentError);
+          }
+        }
+        
+        // If not found by meeting_room_id, try by id (works for both UUID and non-UUID)
+        if (!appointment) {
+          console.log(`🔍 [start-call] Not found by meeting_room_id, trying by id...`);
+          const result = await supabase
+            .from('appointments')
+            .select('id, doctor_id, status, meeting_room_id')
+            .eq('id', roomIdStr)
+            .maybeSingle();
+          
+          if (!result.error && result.data) {
+            appointment = result.data;
+            appointmentError = null;
+            console.log(`✅ [start-call] Found appointment by id: ${appointment.id}`);
+          } else {
+            appointmentError = result.error || appointmentError;
+            if (appointmentError) {
+              console.error(`❌ [start-call] Appointment not found for room ${roomIdStr}:`, appointmentError);
+            } else {
+              console.log(`ℹ️ [start-call] No appointment found with id: ${roomIdStr}`);
+            }
+          }
+        }
 
-        if (appointmentError || !appointment) {
-          console.error(`Appointment not found for room ${roomId}:`, appointmentError);
+        if (!appointment || appointmentError) {
+          console.error(`[start-call] Appointment not found for room "${roomIdStr}":`, appointmentError);
           socket.emit('error', { 
             message: 'Appointment not found. Cannot start call.' 
           });
