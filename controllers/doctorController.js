@@ -6,7 +6,7 @@ const doctorController = {
   // Get all doctors
   getAll: async (req, res, next) => {
     try {
-      const { specialization, is_active, is_verified } = req.query;
+      const { specialization, is_active, is_verified, mental_health_specialty } = req.query;
 
       let query = supabase
         .from('doctors')
@@ -16,6 +16,11 @@ const doctorController = {
       if (specialization) query = query.ilike('specialization', `%${specialization}%`);
       if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
       if (is_verified !== undefined) query = query.eq('is_verified', is_verified === 'true');
+      
+      // Filter by mental health specialty (searches within the JSONB array)
+      if (mental_health_specialty) {
+        query = query.contains('mental_health_specialties', [mental_health_specialty]);
+      }
 
       const { data, error } = await query;
 
@@ -32,7 +37,7 @@ const doctorController = {
   // Get available doctors
   getAvailable: async (req, res, next) => {
     try {
-      const { specialization } = req.query;
+      const { specialization, mental_health_specialty } = req.query;
 
       let query = supabase
         .from('doctors')
@@ -42,6 +47,11 @@ const doctorController = {
         .order('full_name', { ascending: true });
 
       if (specialization) query = query.ilike('specialization', `%${specialization}%`);
+      
+      // Filter by mental health specialty (searches within the JSONB array)
+      if (mental_health_specialty) {
+        query = query.contains('mental_health_specialties', [mental_health_specialty]);
+      }
 
       const { data, error } = await query;
 
@@ -76,7 +86,8 @@ const doctorController = {
       const {
         full_name, email_address, password, phone_number,
         specialization, license_number, qualifications,
-        bio, years_of_experience, consultation_fee, profile_image_url
+        bio, years_of_experience, consultation_fee, profile_image_url,
+        mental_health_specialties
       } = req.body;
 
       if (!full_name || !email_address || !password || !specialization || !license_number) {
@@ -88,6 +99,14 @@ const doctorController = {
 
       if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
+      // Validate mental_health_specialties if provided (should be an array)
+      if (mental_health_specialties !== undefined && !Array.isArray(mental_health_specialties)) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: 'mental_health_specialties must be an array (e.g., ["Anxiety", "Depression"])'
+        });
+      }
+
       const { data: existingDoctor } = await supabase.from('doctors').select('email_address').eq('email_address', email_address).single();
       if (existingDoctor) return res.status(409).json({ error: 'A doctor with this email already exists' });
 
@@ -96,12 +115,20 @@ const doctorController = {
 
       const password_hash = await bcrypt.hash(password, 10);
 
-      const { data, error } = await supabase.from('doctors').insert({
+      // Prepare insert data
+      const insertData = {
         full_name, email_address, password_hash, phone_number,
         specialization, license_number, qualifications, bio,
         years_of_experience, consultation_fee, profile_image_url,
         is_active: true, is_verified: false
-      }).select().single();
+      };
+
+      // Add mental_health_specialties if provided (defaults to empty array from migration)
+      if (mental_health_specialties !== undefined) {
+        insertData.mental_health_specialties = mental_health_specialties;
+      }
+
+      const { data, error } = await supabase.from('doctors').insert(insertData).select().single();
 
       if (error) throw error;
 
@@ -165,8 +192,17 @@ const doctorController = {
         consultation_fee,
         profile_image_url,
         is_active,
-        is_verified
+        is_verified,
+        mental_health_specialties
       } = req.body;
+
+      // Validate mental_health_specialties if provided (should be an array)
+      if (mental_health_specialties !== undefined && !Array.isArray(mental_health_specialties)) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: 'mental_health_specialties must be an array (e.g., ["Anxiety", "Depression"])'
+        });
+      }
 
       const updateData = {};
       if (full_name !== undefined) updateData.full_name = full_name;
@@ -179,6 +215,7 @@ const doctorController = {
       if (profile_image_url !== undefined) updateData.profile_image_url = profile_image_url;
       if (is_active !== undefined) updateData.is_active = is_active;
       if (is_verified !== undefined) updateData.is_verified = is_verified;
+      if (mental_health_specialties !== undefined) updateData.mental_health_specialties = mental_health_specialties;
 
       const { data, error } = await supabase.from('doctors').update(updateData).eq('id', id).select().single();
       if (error) return res.status(404).json({ error: 'Doctor not found' });

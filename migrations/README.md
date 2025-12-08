@@ -9,6 +9,8 @@ This directory contains SQL migration files for setting up the database schema i
 3. `003_create_doctors_table.sql` - Creates the doctors table
 4. `004_create_doctor_schedules_table.sql` - Creates doctor schedules/availability table
 5. `005_create_appointments_table.sql` - Creates appointments table linking users and doctors
+... (additional migrations)
+14. `014_add_mental_health_specialties_to_doctors.sql` - Adds mental health specialties field to doctors table
 
 ## Running Migrations
 
@@ -63,6 +65,7 @@ supabase db push
 - **profile_image_url** (TEXT) - Profile image URL
 - **is_active** (BOOLEAN) - Whether accepting new patients (default: true)
 - **is_verified** (BOOLEAN) - Whether credentials verified (default: false)
+- **mental_health_specialties** (JSONB) - Array of specific mental health issues/problems the doctor specializes in (e.g., ["Anxiety", "Depression", "PTSD"]) - Added in migration 014
 - **created_at** (TIMESTAMP) - Auto-generated creation timestamp
 - **updated_at** (TIMESTAMP) - Auto-updated modification timestamp
 
