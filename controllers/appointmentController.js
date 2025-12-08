@@ -300,7 +300,7 @@ const appointmentController = {
   create: async (req, res, next) => {
     try {
       const {
-        user_id,
+        user_id: body_user_id, // user_id from request body (optional, will use authenticated user if not provided)
         doctor_id,
         appointment_date,
         appointment_time,
@@ -311,12 +311,55 @@ const appointmentController = {
         meeting_room_id
       } = req.body;
 
+      // Get authenticated user ID (from JWT token)
+      const authenticatedUserId = req.user?.id;
+      
+      if (!authenticatedUserId) {
+        return res.status(401).json({
+          error: 'Authentication Error',
+          message: 'User must be authenticated to create an appointment.'
+        });
+      }
+
+      // Use authenticated user's ID as the patient/user_id (not from body to prevent ID swapping)
+      // If body_user_id is provided and doesn't match authenticated user, reject it for security
+      const patientUserId = authenticatedUserId;
+      
+      if (body_user_id && body_user_id !== authenticatedUserId) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'You can only create appointments for yourself. user_id must match authenticated user.'
+        });
+      }
+
       // Validate required fields
-      if (!user_id || !doctor_id || !appointment_date || !appointment_time) {
+      if (!doctor_id || !appointment_date || !appointment_time) {
         return res.status(400).json({
           error: 'Validation Error',
-          message: 'user_id, doctor_id, appointment_date, and appointment_time are required',
-          required_fields: ['user_id', 'doctor_id', 'appointment_date', 'appointment_time']
+          message: 'doctor_id, appointment_date, and appointment_time are required',
+          required_fields: ['doctor_id', 'appointment_date', 'appointment_time']
+        });
+      }
+
+      // Verify patient exists and is NOT a doctor (patients book appointments, doctors receive them)
+      const { data: patient, error: patientError } = await supabase
+        .from('users')
+        .select('id, full_name, role')
+        .eq('id', patientUserId)
+        .single();
+
+      if (patientError || !patient) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: 'Invalid user. Patient not found.'
+        });
+      }
+
+      // CRITICAL: Ensure the user_id is NOT a doctor (prevent ID swapping bug)
+      if (patient.role === 'doctor') {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: 'Doctors cannot book appointments as patients. user_id must be a patient (role="user"), not a doctor.'
         });
       }
 
@@ -334,7 +377,7 @@ const appointmentController = {
         });
       }
 
-      // Verify the user is actually a doctor
+      // Verify the doctor_id points to an actual doctor
       if (doctor.role !== 'doctor' && doctor.role !== 'admin') {
         return res.status(400).json({
           error: 'Validation Error',
@@ -342,14 +385,23 @@ const appointmentController = {
         });
       }
 
+      // CRITICAL: Ensure patient and doctor are different people
+      if (patientUserId === doctor_id) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: 'Cannot create appointment: patient and doctor cannot be the same person.'
+        });
+      }
+
       // Generate meeting room ID if not provided (for video calls)
       const roomId = meeting_room_id || `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       // Create new appointment (doctor_name column is optional/removed, we use doctor_id instead)
+      // Use patientUserId (authenticated user) instead of body user_id to prevent ID swapping
       const { data, error } = await supabase
         .from('appointments')
         .insert({
-          user_id,
+          user_id: patientUserId, // Always use authenticated user's ID as patient
           doctor_id,
           // doctor_name is no longer needed - we can get it from doctor_id via users table
           appointment_date,
